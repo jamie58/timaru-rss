@@ -1,5 +1,8 @@
 name: Build Timaru Herald RSS
 
+permissions:
+  contents: write
+
 on:
   schedule:
     - cron: "0 18 * * *"   # 6:00am NZT (UTC+12) adjust for daylight saving if needed
