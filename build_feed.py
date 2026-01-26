@@ -21,7 +21,7 @@ TIMEOUT = 25
 DELAY = 0.8
 
 HEADERS = {
-    "User-Agent": "TimaruHeraldRSSBot/1.0 (personal use; contact: you@example.com)",
+    "User-Agent": "Mozilla/5.0",
     "Accept": "application/json,text/plain,*/*",
     "Accept-Language": "en-NZ,en;q=0.9",
     "Referer": SECTION_LINK,
@@ -38,25 +38,18 @@ def abs_url(u: str) -> str:
 def clean(s: str) -> str:
     return " ".join((s or "").split()).strip()
 
+def pick_first(d: Dict[str, Any], keys: List[str]) -> Optional[Any]:
+    for k in keys:
+        if k in d and d[k] not in (None, "", [], {}):
+            return d[k]
+    return None
+
 def looks_like_person_name(title: str) -> bool:
-    """
-    Heuristic filter for author names:
-    - 2-4 words
-    - mostly Title Case
-    - shortish overall
-    """
     t = clean(title)
-    if len(t) < 8 or len(t) > 35:
-        return False
     parts = t.split()
-    if not (2 <= len(parts) <= 4):
-        return False
-
-    # If most words start with uppercase, it's probably a name.
-    caps = sum(1 for p in parts if p[:1].isupper())
-    if caps / len(parts) >= 0.75:
-        return True
-
+    if 2 <= len(parts) <= 4 and len(t) < 35:
+        if all(p[:1].isupper() for p in parts):
+            return True
     return False
 
 def looks_like_story(url: str) -> bool:
@@ -65,106 +58,65 @@ def looks_like_story(url: str) -> bool:
     u = url.lower()
     if "thepress.co.nz" not in u:
         return False
-
-    # Skip utility pages + common non-article pages
-    bad = [
-        "/login", "/subscribe", "/account", "/privacy", "/terms", "/contact", "/newsletter",
-        "/author", "/authors", "/profile", "/tag", "/tags", "/topic", "/topics",
-        "/category", "/categories", "/search"
-    ]
+    bad = ["/login", "/subscribe", "/account", "/author", "/profile", "/tag", "/category", "/search"]
     if any(b in u for b in bad):
         return False
-
-    # Heuristic: story URLs tend to be longer than section roots
-    if len(u) < len(SITE_ROOT) + 12:
-        return False
-
     return True
 
-def pick_first(d: Dict[str, Any], keys: List[str]) -> Optional[Any]:
-    for k in keys:
-        if k in d and d[k] not in (None, "", [], {}):
-            return d[k]
-    return None
-
 # ----------------------------
-# Extract story items from JSON (generic + robust)
+# JSON Extraction
 # ----------------------------
 def extract_items_from_json(data: Any) -> List[Dict[str, str]]:
-    """
-    Walk the JSON and extract objects that look like stories:
-    - have a title/headline
-    - have a URL/permalink
-    - NOT author/profile links
-    - NOT person-name titles
-    """
     results: List[Dict[str, str]] = []
 
-    # Keys we commonly see in content APIs
     title_keys = ["headline", "title", "name", "label"]
     url_keys = ["url", "canonicalUrl", "canonical_url", "permalink", "link", "path"]
-
-    # Optional teaser keys
     teaser_keys = ["teaser", "standfirst", "summary", "description"]
-
-    # Optional time keys
-    time_keys = ["published", "publishedAt", "published_at", "firstPublished", "firstPublishedAt", "date", "updatedAt"]
+    time_keys = ["published", "publishedAt", "published_at", "date"]
 
     def walk(obj: Any):
         if isinstance(obj, dict):
             title = pick_first(obj, title_keys)
             url = pick_first(obj, url_keys)
 
-            # Sometimes url is nested or is a dict
             if isinstance(url, dict):
                 url = pick_first(url, ["url", "href", "path", "@id"])
 
-if title and url:
-    t = clean(str(title))
-    link = abs_url(str(url).strip())
+            if title and url:
+                t = clean(str(title))
+                link = abs_url(str(url))
 
-    if looks_like_story(link) and len(t) >= 10 and not looks_like_person_name(t):
+                if looks_like_story(link) and len(t) >= 10 and not looks_like_person_name(t):
 
-        item: Dict[str, str] = {"title": t, "link": link}
+                    item: Dict[str, str] = {"title": t, "link": link}
 
-        # --- Image detection (safe) ---
-        image = None
-        if isinstance(obj, dict):
-            image = pick_first(obj, [
-                "image", "imageUrl", "thumbnail", "heroImage",
-                "leadImage", "featuredImage", "primaryImage"
-            ])
+                    # --- Image detection ---
+                    image = pick_first(obj, [
+                        "image", "imageUrl", "thumbnail", "heroImage",
+                        "leadImage", "featuredImage", "primaryImage"
+                    ])
 
-            if isinstance(image, dict):
-                image = pick_first(image, ["url", "src"])
+                    if isinstance(image, dict):
+                        image = pick_first(image, ["url", "src"])
 
-        if isinstance(image, str):
-            image = image.strip()
-            if image.startswith("/"):
-                image = SITE_ROOT + image
-            if image.startswith("http"):
-                item["image"] = image
-        # --- End image detection ---
+                    if isinstance(image, str):
+                        image = image.strip()
+                        if image.startswith("/"):
+                            image = SITE_ROOT + image
+                        if image.startswith("http"):
+                            item["image"] = image
+                    # --- End image detection ---
 
-        teaser = pick_first(obj, teaser_keys)
-        if teaser:
-            item["description"] = clean(str(teaser))
+                    teaser = pick_first(obj, teaser_keys)
+                    if teaser:
+                        item["description"] = clean(str(teaser))
 
-        published = pick_first(obj, time_keys)
-        pubdate = normalize_pubdate(published)
-        if pubdate:
-            item["pubDate"] = pubdate
+                    published = pick_first(obj, time_keys)
+                    pubdate = normalize_pubdate(published)
+                    if pubdate:
+                        item["pubDate"] = pubdate
 
-        results.append(item)
-
-                        if teaser:
-                            item["description"] = clean(str(teaser))
-
-                        pubdate = normalize_pubdate(published)
-                        if pubdate:
-                            item["pubDate"] = pubdate
-
-                        results.append(item)
+                    results.append(item)
 
             for v in obj.values():
                 walk(v)
@@ -179,56 +131,16 @@ if title and url:
 def normalize_pubdate(value: Any) -> Optional[str]:
     if not value:
         return None
-
-    # epoch ms/seconds
     try:
         if isinstance(value, (int, float)):
-            ts = float(value)
-            if ts > 2_000_000_000_000:
-                ts = ts / 1000.0
-            dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+            dt = datetime.fromtimestamp(float(value), tz=timezone.utc)
             return format_datetime(dt)
     except Exception:
         pass
-
-    # ISO-ish strings
-    if isinstance(value, str):
-        s = value.strip()
-        for fmt in [
-            "%Y-%m-%dT%H:%M:%S.%fZ",
-            "%Y-%m-%dT%H:%M:%SZ",
-            "%Y-%m-%dT%H:%M:%S%z",
-            "%Y-%m-%d %H:%M:%S",
-            "%Y-%m-%d",
-        ]:
-            try:
-                dt = datetime.strptime(s, fmt)
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
-                else:
-                    dt = dt.astimezone(timezone.utc)
-                return format_datetime(dt)
-            except Exception:
-                continue
-
     return None
 
-def dedupe(items: List[Dict[str, str]]) -> List[Dict[str, str]]:
-    seen = set()
-    out = []
-    for it in items:
-        link = it.get("link", "")
-        title = it.get("title", "")
-        if not link or not title:
-            continue
-        if link in seen:
-            continue
-        seen.add(link)
-        out.append(it)
-    return out
-
 # ----------------------------
-# RSS build
+# RSS Build
 # ----------------------------
 def build_rss(items: List[Dict[str, str]]) -> bytes:
     rss = ET.Element("rss", version="2.0")
@@ -244,16 +156,17 @@ def build_rss(items: List[Dict[str, str]]) -> bytes:
         ET.SubElement(item, "title").text = it["title"]
         ET.SubElement(item, "link").text = it["link"]
         ET.SubElement(item, "guid").text = it["link"]
-# 🔹 Attach main image to RSS
-if it.get("image"):
-    enclosure = ET.SubElement(item, "enclosure")
-    enclosure.set("url", it["image"])
-    enclosure.set("type", "image/jpeg")
+
+        if it.get("image"):
+            enclosure = ET.SubElement(item, "enclosure")
+            enclosure.set("url", it["image"])
+            enclosure.set("type", "image/jpeg")
+
+        if it.get("description"):
+            ET.SubElement(item, "description").text = it["description"]
 
         if it.get("pubDate"):
             ET.SubElement(item, "pubDate").text = it["pubDate"]
-        if it.get("description"):
-            ET.SubElement(item, "description").text = it["description"]
 
     return ET.tostring(rss, encoding="utf-8", xml_declaration=True)
 
@@ -264,17 +177,12 @@ def main():
     time.sleep(DELAY)
     r = requests.get(API_URL, headers=HEADERS, timeout=TIMEOUT)
     r.raise_for_status()
-
     data = r.json()
 
-    # Save for inspection
     with open("debug.json", "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
     items = extract_items_from_json(data)
-    items = dedupe(items)
-
-    # Keep first N
     items = items[:MAX_ITEMS]
 
     xml = build_rss(items)
@@ -282,14 +190,6 @@ def main():
         f.write(xml)
 
     print(f"Wrote timaru-herald.xml with {len(items)} items.")
-    if items:
-        print("Top 10:")
-        for it in items[:10]:
-            print("-", it["title"], "=>", it["link"])
-    else:
-        print("No items found in API response. Open debug.json and we’ll target the correct fields.")
 
 if __name__ == "__main__":
     main()
-
-
