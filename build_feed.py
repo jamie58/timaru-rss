@@ -1,4 +1,3 @@
-import json
 import requests
 from datetime import datetime, timezone
 from email.utils import format_datetime
@@ -7,12 +6,13 @@ import xml.etree.ElementTree as ET
 API_URL = "https://www.thepress.co.nz/api/v1.0/the-press/page?path=timaru-herald"
 SITE_ROOT = "https://www.thepress.co.nz"
 
-# 🚫 Filter out any titles that start with these (case-insensitive)
+# 🚫 Titles starting with these get removed
 BLOCKED_STARTS = [
     "in brief: news bites for",
     "in brief:",
     "letters to the editor:",
 ]
+
 
 def build_rss(items):
     rss = ET.Element("rss", version="2.0")
@@ -46,30 +46,43 @@ def main():
 
     for block in data.get("data", []):
         stories = block.get("stories", [])
+
         for story in stories:
             if story.get("type") != "ARTICLE":
                 continue
 
-            title = story.get("content", {}).get("title")
-            snippet = story.get("content", {}).get("intro")
-            url = story.get("content", {}).get("url")
-            image = story.get("teaser", {}).get("image", {}).get("url")
+            content = story.get("content", {})
+            teaser = story.get("teaser", {})
+
+            title = content.get("title")
+            snippet = (
+                content.get("standfirst")  # best summary
+                or teaser.get("text")      # fallback
+                or content.get("intro")    # last fallback
+            )
+            url = content.get("url")
+            image = teaser.get("image", {}).get("url")
             date = story.get("publishedDate")
 
             if not all([title, snippet, url, image, date]):
                 continue
 
-            # 🚫 Title filters
+            # 🚫 Remove unwanted roundup/editorial types
             title_clean = title.strip().lower()
             if any(title_clean.startswith(b) for b in BLOCKED_STARTS):
                 continue
+
+            # ✂️ Trim snippet length
+            snippet = snippet.strip()
+            if len(snippet) > 280:
+                snippet = snippet[:277] + "..."
 
             link = SITE_ROOT + url
             pubdate = format_datetime(datetime.fromisoformat(date.replace("Z", "+00:00")))
 
             items.append({
                 "title": title.strip(),
-                "snippet": snippet.strip(),
+                "snippet": snippet,
                 "link": link,
                 "image": image,
                 "pubDate": pubdate
