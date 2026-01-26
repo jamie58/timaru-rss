@@ -27,11 +27,11 @@ jobs:
       - name: Run RSS builder
         run: python build_feed.py
 
-      - name: Commit updated feed
-        run: |
-        git config user.name "github-actions"
-        git config user.email "actions@github.com"
-        git add -A
-        git commit -m "Update RSS + debug" || echo "No changes"
-        git push
+- name: Commit updated feed
+  run: |
+    git config user.name "github-actions"
+    git config user.email "actions@github.com"
+    git add -A
+    git commit -m "Update RSS + debug" || echo "No changes"
+    git push
 
