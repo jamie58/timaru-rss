@@ -119,36 +119,43 @@ def extract_items_from_json(data: Any) -> List[Dict[str, str]]:
             if isinstance(url, dict):
                 url = pick_first(url, ["url", "href", "path", "@id"])
 
-            if title and url:
-                t = clean(str(title))
-                link = abs_url(str(url).strip())
+if title and url:
+    t = clean(str(title))
+    link = abs_url(str(url).strip())
 
-                # NEW: ignore author-y titles and non-story URLs
-                if looks_like_person_name(t):
-                    pass
-                else:
-                    if looks_like_story(link) and len(t) >= 10:
-                        teaser = pick_first(obj, teaser_keys)
-                        published = pick_first(obj, time_keys)
+    if looks_like_story(link) and len(t) >= 10 and not looks_like_person_name(t):
 
-                        item: Dict[str, str] = {"title": t, "link": link}
+        item: Dict[str, str] = {"title": t, "link": link}
 
-# 🔹 Try to find an image URL in the JSON object
-image = pick_first(obj, [
-    "image", "imageUrl", "thumbnail", "heroImage",
-    "leadImage", "featuredImage", "primaryImage"
-])
+        # --- Image detection (safe) ---
+        image = None
+        if isinstance(obj, dict):
+            image = pick_first(obj, [
+                "image", "imageUrl", "thumbnail", "heroImage",
+                "leadImage", "featuredImage", "primaryImage"
+            ])
 
-if isinstance(image, dict):
-    image = pick_first(image, ["url", "src"])
+            if isinstance(image, dict):
+                image = pick_first(image, ["url", "src"])
 
-if isinstance(image, str):
-    image = image.strip()
-    if image.startswith("/"):
-        image = SITE_ROOT + image
-    if image.startswith("http"):
-        item["image"] = image
+        if isinstance(image, str):
+            image = image.strip()
+            if image.startswith("/"):
+                image = SITE_ROOT + image
+            if image.startswith("http"):
+                item["image"] = image
+        # --- End image detection ---
 
+        teaser = pick_first(obj, teaser_keys)
+        if teaser:
+            item["description"] = clean(str(teaser))
+
+        published = pick_first(obj, time_keys)
+        pubdate = normalize_pubdate(published)
+        if pubdate:
+            item["pubDate"] = pubdate
+
+        results.append(item)
 
                         if teaser:
                             item["description"] = clean(str(teaser))
@@ -284,4 +291,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
