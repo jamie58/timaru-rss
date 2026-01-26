@@ -29,8 +29,9 @@ jobs:
 
       - name: Commit updated feed
         run: |
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          git add timaru-herald.xml
-          git commit -m "Update RSS feed" || echo "No changes"
-          git push
+        git config user.name "github-actions"
+        git config user.email "actions@github.com"
+        git add -A
+        git commit -m "Update RSS + debug" || echo "No changes"
+        git push
+
