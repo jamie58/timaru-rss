@@ -2,8 +2,11 @@ name: Build Timaru Herald RSS
 
 on:
   schedule:
-    - cron: '0 * * * *'   # ⬅️ RUNS EVERY HOUR
-  workflow_dispatch:      # Allows manual "Run workflow" button
+    - cron: "0 * * * *"   # every hour
+  workflow_dispatch:
+
+permissions:
+  contents: write          # ✅ allow git push with GITHUB_TOKEN
 
 jobs:
   build:
@@ -12,11 +15,14 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: true  # ✅ keeps token for push
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: "3.x"
 
       - name: Install dependencies
         run: pip install requests
@@ -26,8 +32,16 @@ jobs:
 
       - name: Commit updated RSS feed
         run: |
-          git config --global user.name "github-actions"
-          git config --global user.email "actions@github.com"
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+
           git add timaru-herald.xml
-          git commit -m "Auto-update RSS feed" || echo "No changes"
+
+          # Only commit + push if something changed
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+
+          git commit -m "Auto-update RSS feed"
           git push
