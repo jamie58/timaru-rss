@@ -1,25 +1,22 @@
 name: Build Timaru Herald RSS
 
-permissions:
-  contents: write
-
 on:
   schedule:
-    - cron: "0 18 * * *"   # 6:00am NZST (UTC+12). For NZDT use 0 17 * * *
-  workflow_dispatch:
+    - cron: '0 * * * *'   # ⬅️ RUNS EVERY HOUR
+  workflow_dispatch:      # Allows manual "Run workflow" button
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: '3.x'
 
       - name: Install dependencies
         run: pip install requests
@@ -27,16 +24,10 @@ jobs:
       - name: Run RSS builder
         run: python build_feed.py
 
-      - name: Upload debug.json artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: debug-json
-          path: debug.json
-
-      - name: Commit updated feed
+      - name: Commit updated RSS feed
         run: |
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
+          git config --global user.name "github-actions"
+          git config --global user.email "actions@github.com"
           git add timaru-herald.xml
-          git commit -m "Update RSS feed" || echo "No changes"
+          git commit -m "Auto-update RSS feed" || echo "No changes"
           git push
