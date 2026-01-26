@@ -133,6 +133,23 @@ def extract_items_from_json(data: Any) -> List[Dict[str, str]]:
 
                         item: Dict[str, str] = {"title": t, "link": link}
 
+# 🔹 Try to find an image URL in the JSON object
+image = pick_first(obj, [
+    "image", "imageUrl", "thumbnail", "heroImage",
+    "leadImage", "featuredImage", "primaryImage"
+])
+
+if isinstance(image, dict):
+    image = pick_first(image, ["url", "src"])
+
+if isinstance(image, str):
+    image = image.strip()
+    if image.startswith("/"):
+        image = SITE_ROOT + image
+    if image.startswith("http"):
+        item["image"] = image
+
+
                         if teaser:
                             item["description"] = clean(str(teaser))
 
@@ -220,6 +237,11 @@ def build_rss(items: List[Dict[str, str]]) -> bytes:
         ET.SubElement(item, "title").text = it["title"]
         ET.SubElement(item, "link").text = it["link"]
         ET.SubElement(item, "guid").text = it["link"]
+# 🔹 Attach main image to RSS
+if it.get("image"):
+    enclosure = ET.SubElement(item, "enclosure")
+    enclosure.set("url", it["image"])
+    enclosure.set("type", "image/jpeg")
 
         if it.get("pubDate"):
             ET.SubElement(item, "pubDate").text = it["pubDate"]
@@ -262,3 +284,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
