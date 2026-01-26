@@ -7,6 +7,13 @@ import xml.etree.ElementTree as ET
 API_URL = "https://www.thepress.co.nz/api/v1.0/the-press/page?path=timaru-herald"
 SITE_ROOT = "https://www.thepress.co.nz"
 
+# 🚫 Filter out any titles that start with these (case-insensitive)
+BLOCKED_STARTS = [
+    "in brief: news bites for",
+    "in brief:",
+    "letters to the editor:",
+]
+
 def build_rss(items):
     rss = ET.Element("rss", version="2.0")
     channel = ET.SubElement(rss, "channel")
@@ -50,6 +57,11 @@ def main():
             date = story.get("publishedDate")
 
             if not all([title, snippet, url, image, date]):
+                continue
+
+            # 🚫 Title filters
+            title_clean = title.strip().lower()
+            if any(title_clean.startswith(b) for b in BLOCKED_STARTS):
                 continue
 
             link = SITE_ROOT + url
